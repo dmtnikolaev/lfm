@@ -6,12 +6,17 @@
 namespace lfm::bit
 {
 
-static uint32_t reverse( uint32_t x );
-static uint8_t msb( uint32_t x );
-static uint8_t lsb( uint32_t x );
-static void mark( void* p );
-static void unmark( void* p );
-static bool marked( void* p );
+uint32_t reverse( uint32_t x );
+uint8_t msb( uint32_t x );
+uint8_t lsb( uint32_t x );
+void mark( void* p );
+uint32_t mark( uint32_t hash_key );
+bool marked( void* p );
+uint32_t marked( uint32_t hash_key );
+void unmark( void* p );
+uint32_t unmark( uint32_t hash_key );
+
+uint32_t parent_bucket( uint32_t bucket_num );
 
 } // namespace lfm::bit
 
