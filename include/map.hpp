@@ -12,6 +12,8 @@ struct Map
     virtual bool insert( K key, V* value ) = 0;
     virtual bool find( K key, V** ret_value ) = 0;
     virtual bool remove( K key ) = 0;
+
+    virtual size_t size() = 0;
 };
 
 } // namespace lfm

@@ -31,6 +31,8 @@ public:
     bool find( K key, V** ret_value ) override;
     bool remove( K key ) override;
 
+    size_t size() override;
+
 private:
     Node* find_pos( Node* sentinel, uint32_t hash_key, Node** ret_prev, Node** ret_next );
     Node* find_bucket( uint32_t bucket );

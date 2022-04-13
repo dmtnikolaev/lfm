@@ -235,6 +235,12 @@ bool SplitOrderedList< K, V >::check_overload( size_t hash_len )
     return size_ / hash_len >= load_factor_;
 }
 
+template< typename K, class V >
+size_t SplitOrderedList< K, V >::size()
+{
+    return size_.load();
+}
+
 } // namespace lfm
 
 #endif // !LFM_SO_LIST_HPP_IMPL
