@@ -38,20 +38,19 @@ uint8_t lsb( uint32_t x )
     return 0;
 }
 
-void mark( void* p )
+void* tag( void* p )
 {
-    assert( false );
+    return reinterpret_cast< void* >( reinterpret_cast< uintptr_t >( p ) | 1 );
 }
 
-void unmark( void* p )
+void* untag( void* p )
 {
-    assert( false );
+    return reinterpret_cast< void* >( reinterpret_cast< uintptr_t >( p ) & ~static_cast< uintptr_t >( 1 ) );
 }
 
-bool marked( void* p )
+bool tagged( void* p )
 {
-    assert( false );
-    return false;
+    return ( reinterpret_cast< uintptr_t >( p ) & 1 ) == 1;
 }
 
 uint32_t mark( uint32_t hash_key )

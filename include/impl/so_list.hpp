@@ -55,8 +55,8 @@ bool SplitOrderedList< K, V >::insert( K key, V* value )
 
             if( hash_len_.compare_exchange_strong( hash_len, new_len ) == false )
             {
-            continue;
-        }
+                continue;
+            }
         }
 
         auto bucket = new_node->hash_key % hash_len_;
@@ -103,15 +103,37 @@ bool SplitOrderedList< K, V >::find( K key, V** ret_value )
         return false;
     }
 
-        *( ret_value ) = res->value;
-        return true;
-    }
+    *( ret_value ) = res->value;
+    return true;
+}
 
 template< typename K, typename V >
 bool SplitOrderedList< K, V >::remove( K key )
 {
-    assert( false );
+    uint32_t hash_key = std::hash< K >{}( key );
+    hash_key = bit::mark( hash_key );
+
+    Node* next;
+    Node* prev;
+
+    auto found = find_pos( find_bucket( hash_key % hash_len_ ), hash_key, &prev, &next );
+
+    if( found == nullptr )
+    {
+        return false;
+    }
+
+    Node* next_tagged = reinterpret_cast< Node* >( bit::tag( next ) );
+
+    if( found->next.compare_exchange_strong( next, next_tagged ) )
+    {
+        size_--;
+        return true;
+    }
+
+    return false;
 }
+
 template< typename K, class V >
 typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
     Node* sentinel, uint32_t hash_key, Node** ret_prev, Node** ret_next )
@@ -130,6 +152,14 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
         prev = found;
         found = next;
         next = found->next.load();
+
+        while( bit::tagged( next ) )
+        {
+            prev = found;
+            found = next;
+            auto untag = reinterpret_cast< Node* >( bit::untag( next ) );
+            untag == nullptr ? next = nullptr : next = untag->next;
+        }
     }
 
     if( ret_next != nullptr )
@@ -137,12 +167,12 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
         *ret_next = next;
     }
 
-    if( found->hash_key != hash_key )
+    if( !bit::tagged( found ) && found->hash_key != hash_key )
     {
         if( ret_prev != nullptr )
         {
             *ret_prev = found;
-}
+        }
 
         return nullptr;
     }
@@ -150,6 +180,11 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
     if( ret_prev != nullptr )
     {
         *ret_prev = prev;
+    }
+
+    if( bit::tagged( found ) )
+    {
+        return nullptr;
     }
 
     return found;
@@ -172,18 +207,19 @@ bool SplitOrderedList< K, V >::insert_pos( Node* new_node, Node* sentinel, bool*
 
     return exchanged;
 }
+
 template< typename K, class V >
 typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_bucket( uint32_t bucket )
 {
     auto hash_seg = find_segment( bucket );
     for( auto i = 0; i < max_tries_; ++i )
     {
-    auto sentinel = hash_seg[ bucket % seg_size_ ].load();
+        auto sentinel = hash_seg[ bucket % seg_size_ ].load();
         if( sentinel == nullptr )
         {
             if( create_bucket( bucket, &sentinel ) )
             {
-    return sentinel;
+                return sentinel;
             }
         }
         else
