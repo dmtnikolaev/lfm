@@ -3,7 +3,7 @@ file(GLOB TEST_SRC
 )
 
 add_executable(${PROJECT_NAME}_test
-    ${TEST_SRC}
+    test1.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_test

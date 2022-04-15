@@ -38,11 +38,11 @@ private:
     Node* find_bucket( uint32_t bucket );
     HashTable find_segment( uint32_t bucket );
     bool insert_pos( Node* new_node, Node* sentinel, bool* ret_flag );
-    bool create_bucket( uint32_t bucket, Node** ret_sentinel );
+    bool create_bucket( uint32_t bucket, HashTable seg, Node** ret_sentinel );
     bool check_overload( size_t hash_len );
 
 private:
-    const size_t max_segs_ = 256;
+    const size_t max_segs_ = 4096;
     const size_t seg_size_;
     const uint32_t load_factor_;
     const uint8_t max_tries_ = 10;
@@ -50,6 +50,7 @@ private:
     std::atomic< size_t > hash_len_ = 0;
     std::atomic< size_t > size_ = 0;
     std::atomic< HashTable >* seg_table_;
+    std::atomic< bool > seg_alloc_spin_ = false;
 };
 
 } // namespace lfm

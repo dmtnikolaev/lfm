@@ -6,6 +6,8 @@
 #include <so_list.hpp>
 #include <stdexcept>
 
+#include <iostream>
+
 namespace lfm
 {
 
@@ -23,8 +25,20 @@ SplitOrderedList< K, V >::SplitOrderedList( size_t seg_size, size_t load_factor 
 template< typename K, typename V >
 SplitOrderedList< K, V >::~SplitOrderedList()
 {
+    auto node = seg_table_[ 0 ][ 0 ].load();
+    while( node != nullptr )
+    {
+        auto old = node;
+        node = node->next;
+
+        delete old;
+    }
+    for( size_t i = 0; i < max_segs_; ++i )
+    {
+        delete[] seg_table_[ i ];
+    }
+
     delete[] seg_table_;
-    assert( false ); // TODO: full delete
 }
 
 template< typename K, typename V >
@@ -40,20 +54,9 @@ bool SplitOrderedList< K, V >::insert( K key, V* value )
         if( check_overload( hash_len ) )
         {
             auto new_len = hash_len << 1;
+            assert( new_len <= seg_size_ * max_segs_ );
 
-            HashTable old_seg = nullptr;
-
-            uint32_t new_seg_ind = hash_len >> static_cast< uint32_t >( std::sqrt( seg_size_ ) );
-            for( auto i = new_seg_ind; i < new_len; ++i )
-            {
-                auto new_seg = new std::atomic< Node* >[ seg_size_ ];
-                if( seg_table_[ i ].compare_exchange_strong( old_seg, new_seg ) == false )
-                {
-                    delete[] new_seg;
-                }
-            }
-
-            if( hash_len_.compare_exchange_strong( hash_len, new_len ) == false )
+            if( !hash_len_.compare_exchange_strong( hash_len, new_len ) )
             {
                 continue;
             }
@@ -61,15 +64,6 @@ bool SplitOrderedList< K, V >::insert( K key, V* value )
 
         auto bucket = new_node->hash_key % hash_len_;
         auto sentinel = find_bucket( bucket );
-
-        if( sentinel == nullptr )
-        {
-            if( create_bucket( bucket, &sentinel ) == false )
-            {
-                tries++;
-                continue;
-            }
-        }
 
         bool ret_flag = false;
         if( insert_pos( new_node, sentinel, &ret_flag ) )
@@ -110,6 +104,8 @@ bool SplitOrderedList< K, V >::find( K key, V** ret_value )
 template< typename K, typename V >
 bool SplitOrderedList< K, V >::remove( K key )
 {
+    assert( false ); // Feature is not ready.
+
     uint32_t hash_key = std::hash< K >{}( key );
     hash_key = bit::mark( hash_key );
 
@@ -152,14 +148,6 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
         prev = found;
         found = next;
         next = found->next.load();
-
-        while( bit::tagged( next ) )
-        {
-            prev = found;
-            found = next;
-            auto untag = reinterpret_cast< Node* >( bit::untag( next ) );
-            untag == nullptr ? next = nullptr : next = untag->next;
-        }
     }
 
     if( ret_next != nullptr )
@@ -167,7 +155,7 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
         *ret_next = next;
     }
 
-    if( !bit::tagged( found ) && found->hash_key != hash_key )
+    if( found->hash_key != hash_key )
     {
         if( ret_prev != nullptr )
         {
@@ -180,11 +168,6 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_pos(
     if( ret_prev != nullptr )
     {
         *ret_prev = prev;
-    }
-
-    if( bit::tagged( found ) )
-    {
-        return nullptr;
     }
 
     return found;
@@ -217,22 +200,25 @@ typename SplitOrderedList< K, V >::Node* SplitOrderedList< K, V >::find_bucket( 
         auto sentinel = hash_seg[ bucket % seg_size_ ].load();
         if( sentinel == nullptr )
         {
-            if( create_bucket( bucket, &sentinel ) )
+            if( create_bucket( bucket, hash_seg, &sentinel ) )
             {
+                assert( sentinel->hash_key == bucket );
                 return sentinel;
             }
         }
         else
         {
+            assert( sentinel->hash_key == bucket );
             return sentinel;
         }
     }
 
+    assert( false );
     return nullptr;
 }
 
 template< typename K, class V >
-bool SplitOrderedList< K, V >::create_bucket( uint32_t bucket, SplitOrderedList::Node** ret_sentinel )
+bool SplitOrderedList< K, V >::create_bucket( uint32_t bucket, HashTable seg, SplitOrderedList::Node** ret_sentinel )
 {
     auto parent = bit::parent_bucket( bucket );
     auto parent_sent = find_bucket( parent );
@@ -243,13 +229,24 @@ bool SplitOrderedList< K, V >::create_bucket( uint32_t bucket, SplitOrderedList:
         parent_sent = find_bucket( parent );
     }
 
-    auto new_sent = new Node{ nullptr, bucket, nullptr };
-    auto seg = find_segment( bucket );
-    Node* old_sent = nullptr;
-    seg[ bucket % seg_size_ ].compare_exchange_strong( old_sent, new_sent );
-
-    if( insert_pos( new_sent, parent_sent, nullptr ) )
+    Node* prev;
+    Node* next;
+    if( find_pos( parent_sent, bucket, &prev, &next ) != nullptr )
     {
+        return false;
+    }
+
+    auto new_sent = new Node{ next, bucket, nullptr };
+    Node* old_sent = nullptr;
+    if( seg[ bucket % seg_size_ ].compare_exchange_strong( old_sent, new_sent ) )
+    {
+        int try_num = 0;
+        while( !( prev->next.compare_exchange_strong( next, new_sent ) ) && try_num < max_tries_ )
+        {
+            assert( find_pos( parent_sent, bucket, &prev, nullptr ) == nullptr );
+            try_num++;
+        }
+        assert( try_num < max_tries_ );
         *( ret_sentinel ) = new_sent;
         return true;
     }
@@ -257,14 +254,30 @@ bool SplitOrderedList< K, V >::create_bucket( uint32_t bucket, SplitOrderedList:
     delete new_sent;
     return false;
 }
+
 template< typename K, class V >
 typename SplitOrderedList< K, V >::HashTable SplitOrderedList< K, V >::find_segment( uint32_t bucket )
 {
-    auto hash_seg = seg_table_[ bucket >> static_cast< uint32_t >( std::sqrt( seg_size_ ) ) ].load();
-    assert( hash_seg != nullptr );
+    uint32_t seg_index = bucket >> static_cast< uint32_t >( std::sqrt( seg_size_ ) );
 
+    auto hash_seg = seg_table_[ seg_index ].load();
+    if( hash_seg == nullptr )
+    {
+        auto new_seg = new std::atomic< Node* >[ seg_size_ ];
+        assert( new_seg != nullptr );
+        if( !seg_table_[ seg_index ].compare_exchange_strong( hash_seg, new_seg ) )
+        {
+            delete[] new_seg;
+            return seg_table_[ seg_index ].load();
+        }
+
+        hash_seg = seg_table_[ seg_index ].load();
+    }
+
+    assert( hash_seg != nullptr );
     return hash_seg;
 }
+
 template< typename K, class V >
 bool SplitOrderedList< K, V >::check_overload( size_t hash_len )
 {
