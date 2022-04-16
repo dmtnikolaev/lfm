@@ -8,7 +8,6 @@ namespace lfm::bit
 
 uint32_t reverse( uint32_t x );
 uint8_t msb( uint32_t x );
-uint8_t lsb( uint32_t x );
 void* tag( void* p );
 uint32_t mark( uint32_t hash_key );
 bool tagged( void* p );

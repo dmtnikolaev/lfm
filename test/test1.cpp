@@ -167,4 +167,5 @@ int main( int argc, char* argv[] )
     }
 
     std::cout << "Took: " << sw.GetNs() << "\n";
+    return 0;
 }

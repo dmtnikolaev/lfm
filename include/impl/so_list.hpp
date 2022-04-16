@@ -104,7 +104,7 @@ bool SplitOrderedList< K, V >::find( K key, V** ret_value )
 template< typename K, typename V >
 bool SplitOrderedList< K, V >::remove( K key )
 {
-    assert( false ); // Feature is not ready.
+    assert( false ); // Hazard Pointers required for delayed deletion.
 
     uint32_t hash_key = std::hash< K >{}( key );
     hash_key = bit::mark( hash_key );

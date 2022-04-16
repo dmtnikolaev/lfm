@@ -32,12 +32,6 @@ uint8_t msb( uint32_t x )
     return i;
 }
 
-uint8_t lsb( uint32_t x )
-{
-    assert( false );
-    return 0;
-}
-
 void* tag( void* p )
 {
     return reinterpret_cast< void* >( reinterpret_cast< uintptr_t >( p ) | 1 );
